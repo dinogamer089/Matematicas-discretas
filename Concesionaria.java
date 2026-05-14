@@ -99,7 +99,7 @@ public class Concesionaria {
     }
 
     public int buscarAutoBinarioPorModeloIndex(String modelo) {
-        automoviles.sort(Comparator.comparing(Automovil::getModelo));
+        automoviles.sort(Comparator.comparing(Automovil::getModelo, String.CASE_INSENSITIVE_ORDER));
         return busquedaBinaria(automoviles, modelo, 0, automoviles.size() - 1);
     }
 
