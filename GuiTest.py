@@ -1,141 +1,138 @@
-import pyautogui
+from __future__ import annotations
+
+import ctypes
+import subprocess
 import time
+from pathlib import Path
 
-# =======================================================
-# CASO UI-001: Registrar un venedor
-# =======================================================
-# Espera unos segundos para que pongas la ventana de Java en foco
-print("Iniciando prueba UI-001 en 3 segundos. Asegúrate de tener la ventana en foco...")
-time.sleep(3)
-
-# 1. Clic en "Gestión de Usuario" del menú principal
-# Usamos tus coordenadas actuales para el botón inferior
-pyautogui.click(x=950, y=700) 
-time.sleep(1)    
-
-# 2. Clic en el campo de texto "ID Vendedor"
-# Asegúrate de que esta coordenada realmente caiga dentro del primer TextField
-pyautogui.click(x=1250, y=360)
-pyautogui.write("V2")
-time.sleep(1)
-
-# 3. Mover al campo "Nombre"
-pyautogui.press('tab')
-pyautogui.write("Carlos")
-time.sleep(1)
-
-# 4. Mover al campo "Teléfono"
-pyautogui.press('tab')
-pyautogui.write("555-0000")
-time.sleep(1)
-
-# 5. Mover al botón "Registrar" y ejecutar la acción
-pyautogui.click(x=1250, y=700)
-time.sleep(0.5) # Pequeña pausa para ver que se seleccionó el botón
-pyautogui.press('enter')
-
-# 6. Manejar el JOptionPane de éxito
-print("Esperando el popup de éxito...")
-time.sleep(1) # Esperamos 1 segundo a que el JOptionPane aparezca en pantalla
-pyautogui.press('enter') # Presiona 'Aceptar' en el popup
-
-print("Prueba UI-001 completada.")
-print("Verifica visualmente los criterios de aceptación: Los campos de texto deben estar vacíos.")
-
-pyautogui.click(x=1250, y=800)
-time.sleep(1)
-pyautogui.click(x=950, y=400) 
-time.sleep(1)
+import pyautogui
+import pytest
 
 
-# =======================================================
-# CASO UI-002: Registrar un nuevo automóvil
-# =======================================================
-print("Ejecutando UI-002: Registrar Auto...")
+APP_TITLE = "Sistema de Concesionaria"
+JAVA_MAIN_CLASS = "ConcesionariaGUI"
+PROJECT_ROOT = Path(__file__).resolve().parent
+JAVA_CLASSPATH = PROJECT_ROOT / "out" / "production" / "Matematicas-discretas"
 
-# 1. Clic en la pestaña "Registrar Auto" (Tercera pestaña)
-# AJUSTAR COORDENADA: Haz clic exactamente sobre el texto de la pestaña
-pyautogui.click(x=750, y=250) 
-time.sleep(1)
 
-# 2. Clic en el primer campo de texto (VIN)
-# AJUSTAR COORDENADA: Clic dentro del TextField de VIN
-pyautogui.click(x=1250, y=320)
-time.sleep(1)
+def _iter_window_titles() -> list[tuple[int, str]]:
+    titles: list[tuple[int, str]] = []
 
-# 3. Llenar los datos usando Tabulador
-pyautogui.write("VIN999")
-time.sleep(1)
-pyautogui.press('tab')
-pyautogui.write("Honda")
-time.sleep(1)
-pyautogui.press('tab')
-pyautogui.write("Civic")
-time.sleep(1)
-pyautogui.press('tab')
-pyautogui.write("25000")
-time.sleep(1)
+    @ctypes.WINFUNCTYPE(ctypes.c_bool, ctypes.c_void_p, ctypes.c_void_p)
+    def enum_windows(hwnd, _):
+        if ctypes.windll.user32.IsWindowVisible(hwnd):
+            length = ctypes.windll.user32.GetWindowTextLengthW(hwnd)
+            if length > 0:
+                buffer = ctypes.create_unicode_buffer(length + 1)
+                ctypes.windll.user32.GetWindowTextW(hwnd, buffer, length + 1)
+                titles.append((int(hwnd), buffer.value))
+        return True
 
-# 4. Tabular hacia el botón y registrar
-pyautogui.click(x=1250, y=680)
-time.sleep(0.5)
-pyautogui.press('enter')
+    ctypes.windll.user32.EnumWindows(enum_windows, 0)
+    return titles
 
-# 5. Manejar el popup de éxito
-time.sleep(1) 
-pyautogui.press('enter') # Cierra el JOptionPane
-print("UI-002 completado. Auto registrado.")
-time.sleep(1)
 
-# =======================================================
-# CASO UI-003: Visualizar Inventario General
-# =======================================================
-print("Ejecutando UI-003: Visualizar Inventario General...")
+def _find_app_window() -> int | None:
+    for hwnd, title in _iter_window_titles():
+        if APP_TITLE.lower() in title.lower():
+            return hwnd
+    return None
 
-# 1. Clic en la pestaña "Consulta General" (Cuarta pestaña)
-# AJUSTAR COORDENADA: Clic sobre la pestaña
-pyautogui.click(x=900, y=250)
-time.sleep(1)
 
-# 2. Clic en el botón "Mostrar Inventario"
-# AJUSTAR COORDENADA: Botón en la parte superior del panel
-pyautogui.click(x=900, y=280)
-time.sleep(1)
-print("UI-003 completado. La tabla debe mostrar el Honda Civic recién agregado.")
-time.sleep(1)
+def _focus_window(hwnd: int) -> None:
+    user32 = ctypes.windll.user32
+    user32.ShowWindow(hwnd, 9)
+    user32.SetForegroundWindow(hwnd)
 
-# =======================================================
-# CASO UI-004: Intento de registro de venta incompleto
-# =======================================================
-print("Ejecutando UI-004: Registro incompleto...")
 
-# 1. Clic en la pestaña "Registrar Venta" (Primera pestaña)
-# AJUSTAR COORDENADA: Clic sobre la pestaña
-pyautogui.click(x=500, y=250)
-time.sleep(1)
+def _start_app() -> subprocess.Popen[str]:
+    command = ["java", "-cp", str(JAVA_CLASSPATH), JAVA_MAIN_CLASS]
+    creationflags = 0
+    if hasattr(subprocess, "CREATE_NO_WINDOW"):
+        creationflags |= subprocess.CREATE_NO_WINDOW
+    if hasattr(subprocess, "CREATE_NEW_PROCESS_GROUP"):
+        creationflags |= subprocess.CREATE_NEW_PROCESS_GROUP
+    return subprocess.Popen(command, cwd=PROJECT_ROOT, creationflags=creationflags)
 
-# 2. Posicionarse en el primer campo de texto (Nombre Cliente)
-# AJUSTAR COORDENADA: Clic en el TextField de Cliente (el de arriba es un ComboBox)
-pyautogui.click(x=1250, y=360) 
 
-# 3. Avanzamos con Tabulador por todo el formulario dejándolo vacío
-# Tabulamos 7 veces para pasar por Cliente, Dirección, Teléfono, VIN, Tipo, Precio, Mensualidades y llegar al botón
-for _ in range(7):
-    pyautogui.press('tab')
-    time.sleep(1)
+def _ensure_app_running(timeout_seconds: int = 30) -> subprocess.Popen[str] | None:
+    hwnd = _find_app_window()
+    if hwnd is not None:
+        _focus_window(hwnd)
+        return None
 
-# 4. Presionar el botón "Registrar Venta" con los campos en blanco
-pyautogui.click(x=1250, y=750)
+    process = _start_app()
+    deadline = time.monotonic() + timeout_seconds
+    while time.monotonic() < deadline:
+        hwnd = _find_app_window()
+        if hwnd is not None:
+            _focus_window(hwnd)
+            return process
+        if process.poll() is not None:
+            raise RuntimeError("ConcesionariaGUI exited before the window became ready.")
+        time.sleep(0.5)
 
-# 5. Manejar el JOptionPane de Error que lanza el catch (NumberFormatException)
-time.sleep(1)           
-pyautogui.press('enter') # Cierra el popup de error
-print("UI-004 completado. Se capturó la excepción y la app sigue viva.")
+    raise TimeoutError("Timed out waiting for ConcesionariaGUI to become ready.")
 
-# =======================================================
-# FINALIZAR: Volver al menú
-# =======================================================
-time.sleep(1)
-# Usando la coordenada que ya tenías descubierta para el botón de volver
-pyautogui.click(x=1250, y=800)
-print("¡Todas las pruebas automatizadas han concluido!")
+
+@pytest.fixture(scope="session", autouse=True)
+def concesionaria_gui_app() -> None:
+    process = _ensure_app_running()
+    try:
+        yield
+    finally:
+        if process is not None and process.poll() is None:
+            process.terminate()
+            try:
+                process.wait(timeout=10)
+            except subprocess.TimeoutExpired:
+                process.kill()
+
+
+def test_gui_flow() -> None:
+    pyautogui.PAUSE = 0.3
+
+    print("Iniciando prueba UI-001.")
+    pyautogui.click(x=950, y=700)
+    pyautogui.click(x=1250, y=360)
+    pyautogui.write("V2")
+    pyautogui.press("tab")
+    pyautogui.write("Carlos")
+    pyautogui.press("tab")
+    pyautogui.write("555-0000")
+    pyautogui.click(x=1250, y=700)
+    pyautogui.press("enter")
+    pyautogui.press("enter")
+
+    print("Ejecutando UI-002: Registrar Auto...")
+    #ir al menu principal
+    pyautogui.click(x=970, y=830)
+    #ir a gestion de inventario
+    pyautogui.click(x=960, y=430)
+    #ir a registrar auto
+    pyautogui.click(x=750, y=250)
+    #Click en VIN
+    pyautogui.click(x=1250, y=320)
+    pyautogui.write("VIN999")
+    pyautogui.press("tab")
+    pyautogui.write("Honda")
+    pyautogui.press("tab")
+    pyautogui.write("Civic")
+    pyautogui.press("tab")
+    pyautogui.write("25000")
+    pyautogui.click(x=1250, y=680)
+    pyautogui.press("enter")
+
+    print("Ejecutando UI-003: Visualizar Inventario General...")
+    pyautogui.click(x=930, y=270)
+    pyautogui.click(x=950, y=310)
+
+    print("Ejecutando UI-004: Registro incompleto...")
+    pyautogui.click(x=790, y=270)
+    pyautogui.click(x=1250, y=360)
+    for _ in range(4):
+        pyautogui.press("tab")
+    pyautogui.click(x=1250, y=670)
+    pyautogui.press("enter")
+
+    pyautogui.click(x=1250, y=820)
