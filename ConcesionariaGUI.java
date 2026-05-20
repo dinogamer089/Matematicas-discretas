@@ -302,7 +302,7 @@ public class ConcesionariaGUI extends JFrame {
                 Automovil nuevo = new Automovil(vin, marca, modelo, precio, "En concesionaria");
                 concesionaria.getAutomoviles().add(nuevo);
                 concesionaria.guardarDatos();
-                JOptionPane.showMessageDialog(this, "Automóvil registrado con éxito.");
+                JOptionPane.showMessageDialog(this, "Automovil registrado con exito.");
 
                 vinField.setText(""); marcaField.setText(""); modeloField.setText(""); precioField.setText("");
             } catch (Exception ex) {
